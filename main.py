@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 LLM 模型评测工具 — 入口
 用法: 先配置 config.py，然后运行 python main.py
