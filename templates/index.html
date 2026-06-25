@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM 模型评测工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f7fa; color: #1d1d1f; }
+        .header { background: linear-gradient(135deg, #3964fe 0%, #2b4fd4 100%); color: #fff; padding: 32px 24px; }
+        .header h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+        .header p { font-size: 14px; opacity: 0.85; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+        .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; overflow: hidden; }
+        .card-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        .card-body { padding: 20px; }
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: #3964fe; color: #fff; }
+        .btn-primary:hover { background: #2b4fd4; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sm { padding: 6px 14px; font-size: 13px; border-radius: 6px; }
+        .btn-outline { background: transparent; border: 1px solid #d0d5dd; color: #444; }
+        .btn-outline:hover { background: #f5f5f5; }
+        .status-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+        .status-ready { background: #e8f5e9; color: #2e7d32; }
+        .status-running { background: #fff3e0; color: #e65100; }
+        .status-error { background: #ffebee; color: #c62828; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .chart-box { padding: 12px; }
+        .chart-box canvas { max-height: 280px; }
+        .score-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .score-table th { background: #f9fafb; text-align: left; padding: 10px 12px; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        .score-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+        .score-table tr:hover td { background: #f9fafb; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .badge-green { background: #e8f5e9; color: #2e7d32; }
+        .badge-yellow { background: #fff3e0; color: #e65100; }
+        .badge-red { background: #ffebee; color: #c62828; }
+        .accordion { margin-top: 8px; }
+        .accordion-item { border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+        .accordion-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; background: #fafafa; transition: background 0.2s; }
+        .accordion-header:hover { background: #f0f0f0; }
+        .accordion-body { padding: 16px; display: none; font-size: 13px; line-height: 1.6; }
+        .accordion-body.open { display: block; }
+        .accordion-body pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin-top: 8px; white-space: pre-wrap; word-break: break-word; }
+        .meta { display: flex; gap: 16px; font-size: 12px; color: #888; margin: 4px 0 8px; }
+        .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+        .empty-state h3 { font-size: 16px; margin-bottom: 8px; color: #666; }
+        .dimension-score { display: inline-flex; align-items: center; gap: 4px; }
+        .dimension-score .bar { display: inline-block; height: 8px; border-radius: 4px; margin-right: 4px; }
+        .footer { text-align: center; font-size: 12px; color: #aaa; padding: 20px; }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="container" style="padding:0">
+        <h1>LLM 模型评测工具</h1>
+        <p>多维度评测各大语言模型的中文能力</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 状态栏 -->
+    <div id="statusBar" class="status-bar status-ready">
+        <span>⚡</span>
+        <span id="statusText">就绪 — 点击下方按钮开始评测</span>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div style="margin-bottom:20px">
+        <button id="runBtn" class="btn btn-primary" onclick="runEvaluation()">
+            ▶ 开始评测
+        </button>
+    </div>
+
+    <!-- 评测结果区域 -->
+    <div id="resultArea" style="display:none">
+        <!-- 综合评分卡片 -->
+        <div class="card">
+            <div class="card-header">📊 综合评分</div>
+            <div class="card-body">
+                <div class="charts-grid">
+                    <div class="chart-box"><canvas id="radarChart"></canvas></div>
+                    <div class="chart-box"><canvas id="barChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 得分明细表 -->
+        <div class="card">
+            <div class="card-header">📋 各维度得分明细</div>
+            <div class="card-body">
+                <div style="overflow-x:auto">
+                    <table class="score-table" id="scoreTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 各维度详情 -->
+        <div class="card">
+            <div class="card-header">📝 逐题详情</div>
+            <div class="card-body">
+                <div id="detailAccordion" class="accordion"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div id="emptyState" class="card">
+        <div class="empty-state">
+            <h3>还没有评测数据</h3>
+            <p>点击上方「开始评测」按钮运行一次评测</p>
+        </div>
+    </div>
+</div>
+
+<div class="footer">LLM Eval Tool — 实习项目</div>
+
+<script>
+let chartInstances = {};
+const WEIGHTS = { "逻辑推理": 0.25, "代码生成": 0.25, "中文理解": 0.20, "安全性": 0.15, "知识问答": 0.15 };
+
+function setStatus(type, text) {
+    const bar = document.getElementById("statusBar");
+    const txt = document.getElementById("statusText");
+    bar.className = "status-bar status-" + type;
+    txt.textContent = text;
+}
+
+function scoreBadge(score) {
+    if (score >= 7) return `<span class="badge badge-green">${score}</span>`;
+    if (score >= 4) return `<span class="badge badge-yellow">${score}</span>`;
+    return `<span class="badge badge-red">${score}</span>`;
+}
+
+async function runEvaluation() {
+    const btn = document.getElementById("runBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span> 评测中...';
+    setStatus("running", "正在调用 API 进行评测，请稍候...");
+
+    try {
+        const resp = await fetch("/api/run", { method: "POST" });
+        const data = await resp.json();
+        if (data.error) { throw new Error(data.error); }
+        renderResults(data);
+        setStatus("ready", `✅ 评测完成！共 ${data.results.length} 道题，报告已生成`);
+    } catch (err) {
+        setStatus("error", "❌ 评测失败: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = "▶ 重新评测";
+    }
+}
+
+function renderResults(data) {
+    document.getElementById("resultArea").style.display = "block";
+    document.getElementById("emptyState").style.display = "none";
+
+    const dims = Object.keys(WEIGHTS);
+    const models = data.models;
+    const colors = ["#3964fe", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+    // 计算加权总分
+    function calcWeighted(modelName) {
+        let total = 0;
+        for (const [dim, w] of Object.entries(WEIGHTS)) {
+            if (data.data[modelName] && data.data[modelName][dim]) {
+                total += data.data[modelName][dim].avg_score * w;
+            }
+        }
+        return Math.round(total * 10) / 10;
+    }
+
+    // 雷达图
+    const radarCtx = document.getElementById("radarChart").getContext("2d");
+    if (chartInstances.radar) chartInstances.radar.destroy();
+    chartInstances.radar = new Chart(radarCtx, {
+        type: "radar",
+        data: {
+            labels: dims,
+            datasets: models.map((m, i) => ({
+                label: m,
+                data: dims.map(d => data.data[m]?.[d]?.avg_score || 0),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length] + "20",
+                pointBackgroundColor: colors[i % colors.length],
+            }))
+        },
+        options: { responsive: true, scales: { r: { min: 0, max: 10, ticks: { stepSize: 2 } } } }
+    });
+
+    // 柱状图
+    const barCtx = document.getElementById("barChart").getContext("2d");
+    if (chartInstances.bar) chartInstances.bar.destroy();
+    chartInstances.bar = new Chart(barCtx, {
+        type: "bar",
+        data: {
+            labels: models,
+            datasets: [{
+                label: "加权总分",
+                data: models.map(m => calcWeighted(m)),
+                backgroundColor: colors.slice(0, models.length),
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { min: 0, max: 10, ticks: { stepSize: 2 } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // 得分表
+    let tableHtml = "<tr><th>模型</th>";
+    for (const d of dims) { tableHtml += `<th>${d}</th>`; }
+    tableHtml += "<th>加权总分</th><th>平均延迟</th></tr>";
+    for (const m of models) {
+        tableHtml += `<tr><td><strong>${m}</strong></td>`;
+        for (const d of dims) {
+            const s = data.data[m]?.[d]?.avg_score ?? "-";
+            tableHtml += `<td>${scoreBadge(s)}</td>`;
+        }
+        tableHtml += `<td><strong>${calcWeighted(m)}</strong></td>`;
+        const latencies = data.data[m]?.[dims[0]]?.avg_latency ?? 0;
+        tableHtml += `<td>${latencies.toFixed(1)}s</td></tr>`;
+    }
+    document.getElementById("scoreTable").innerHTML = tableHtml;
+
+    // 逐题详情
+    let accordionHtml = "";
+    for (const r of data.results) {
+        const qShort = r.prompt.length > 60 ? r.prompt.substring(0, 60) + "..." : r.prompt;
+        accordionHtml += `
+        <div class="accordion-item">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+                <span>${scoreBadge(r.score)} ${r.dimension}: ${qShort}</span>
+                <span style="font-size:12px;color:#999">${r.model} · ${r.latency}s</span>
+            </div>
+            <div class="accordion-body">
+                <div class="meta">
+                    <span>维度: ${r.dimension}</span>
+                    <span>模型: ${r.model}</span>
+                    <span>延迟: ${r.latency}s</span>
+                    ${r.error ? '<span style="color:red">错误: '+r.error+'</span>' : ''}
+                </div>
+                <strong>题目:</strong>
+                <p style="margin:4px 0 8px">${r.prompt}</p>
+                <strong>模型回答:</strong>
+                <pre>${r.response}</pre>
+            </div>
+        </div>`;
+    }
+    document.getElementById("detailAccordion").innerHTML = accordionHtml;
+}
+
+function toggleAccordion(el) {
+    const body = el.nextElementSibling;
+    body.classList.toggle("open");
+}
+
+// 页面加载时检查配置
+fetch("/api/check").then(r => r.json()).then(d => {
+    if (!d.config_ok) {
+        setStatus("error", "⚠️ 未配置 API Key，请在 config.py 中填写");
+    }
+});
+</script>
+</body>
+</html>
