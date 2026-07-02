@@ -1,5 +1,5 @@
-@echo off
+Ôªø@echo off
 chcp 65001 >nul
-cd /d D:\¥˙¬Î\Codex\llm_eval
-start "" python run.py
+cd /d D:\‰ª£Á†Å\Codex\llm_eval
+start "" "D:\‰ª£Á†Å\Python\Python 3.12.0\python.exe" run.py
 exit
